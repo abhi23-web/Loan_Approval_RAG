@@ -1,0 +1,65 @@
+# Chunking strategies available to the ingestion pipeline and the experiment
+# sweep. Each named strategy gets its own ChromaDB collection, so all of them
+# can coexist on disk and be compared against the same golden dataset.
+#
+# No strategy is assumed to be best. config/settings.yaml -> chunking.active_strategy
+# selects the live one, and that choice must be justified by
+# evaluation/experiment_results/, not by intuition.
+
+strategies:
+
+  fixed_500_50:
+    type: fixed
+    chunk_size: 500
+    chunk_overlap: 50
+    description: >
+      Blind fixed-width character windows. Included as the control: it ignores
+      document structure entirely, so it shows what structure-awareness buys.
+
+  recursive_500_50:
+    type: recursive
+    chunk_size: 500
+    chunk_overlap: 50
+    description: >
+      Small recursive chunks. High precision per chunk, but a clause whose
+      definition and exception sit apart may lose its context.
+
+  recursive_800_100:
+    type: recursive
+    chunk_size: 800
+    chunk_overlap: 100
+    description: >
+      Baseline. Roughly one policy clause plus its immediate qualifiers.
+
+  recursive_1000_150:
+    type: recursive
+    chunk_size: 1000
+    chunk_overlap: 150
+    description: >
+      Larger window favouring recall of multi-paragraph rules such as LTV slab
+      tables, at the cost of more irrelevant text per retrieved chunk.
+
+  semantic:
+    type: semantic
+    # Sentences are embedded, and a boundary is cut wherever the distance
+    # between consecutive sentence groups exceeds this percentile.
+    breakpoint_percentile: 90
+    buffer_sentences: 1
+    min_chunk_characters: 300
+    max_chunk_characters: 1600
+    description: >
+      Embedding-driven boundaries that follow topic shifts rather than character
+      counts. Most expensive to build (one embedding call per sentence group).
+
+# Separator ladder for the recursive strategy, most-preferred first. Policy
+# documents are clause-numbered, so paragraph and numbered-clause boundaries are
+# tried before sentences, and character-level splitting is the last resort.
+recursive_separators:
+  - "\n\n\n"
+  - "\n\n"
+  - "\n"
+  - ". "
+  - "; "
+  - ", "
+  - " "
+  - ""

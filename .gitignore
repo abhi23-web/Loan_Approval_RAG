@@ -1,0 +1,30 @@
+# Secrets — never commit real keys.
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local data: regenerable from the source registry, and potentially large.
+data/raw/
+data/processed/
+data/chroma/
+data/metadata/
+
+# Evaluation output is a build artefact; the golden dataset itself IS committed.
+evaluation/experiment_results/*
+!evaluation/experiment_results/.gitkeep
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Test fixtures written under data/ so file:// sources stay inside the repo.
+data/test_fixtures/

@@ -1,0 +1,116 @@
+# Behavioural configuration for the Home Loan RAG system.
+#
+# Nothing in this file is a secret. Secrets live in .env.
+# Any value can be overridden at runtime with an environment variable using the
+# HLR__ prefix and __ as the path separator, e.g. HLR__RETRIEVAL__TOP_K=8.
+# That mechanism is what the experiment scripts use to sweep one variable at a
+# time without editing this file.
+
+app:
+  name: home-loan-rag
+  environment: local
+  log_level: INFO
+
+paths:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  chroma_dir: data/chroma
+  metadata_dir: data/metadata
+  experiment_results_dir: evaluation/experiment_results
+
+llm:
+  # "ollama"      -> real local model over the Ollama HTTP API
+  # "deterministic" -> offline stub used by unit tests and CI; never for real answers
+  provider: ollama
+  base_url: http://localhost:11434
+  model: llama3.1:8b
+  # Determinism controls. An LLM is not inherently deterministic; these settings
+  # plus a fixed retrieval order are what make repeated runs reproducible.
+  temperature: 0.0
+  top_p: 1.0
+  seed: 42
+  num_ctx: 8192
+  num_predict: 800
+  request_timeout_seconds: 300
+
+embeddings:
+  provider: ollama          # "ollama" | "deterministic"
+  base_url: http://localhost:11434
+  model: nomic-embed-text
+  # Chunks are embedded in batches so a 400-chunk document is not 400 round trips.
+  batch_size: 16
+  request_timeout_seconds: 300
+
+vector_store:
+  # One Chroma collection per chunking strategy so experiments never contaminate
+  # each other and switching strategies is a config change, not a rebuild.
+  collection_prefix: home_loan_policy
+  distance: cosine
+
+ingestion:
+  user_agent: home-loan-rag/1.0 (+local evaluation project)
+  request_timeout_seconds: 60
+  max_download_bytes: 26214400        # 25 MiB guard against hostile/huge downloads
+  allowed_schemes: ["https", "file"]
+  max_retries: 3
+  retry_backoff_seconds: 2
+
+chunking:
+  # Which strategy the live pipeline ingests with. Experiment strategies are
+  # defined in config/chunking.yaml and can each own their own collection.
+  active_strategy: recursive_800_100
+
+retrieval:
+  active_strategy: recursive_800_100   # must match an ingested collection
+  top_k: 5
+  # Cosine similarity in [0, 1] after conversion from Chroma's distance.
+  # Chunks below this are dropped before they ever reach the prompt.
+  min_similarity: 0.25
+  # Only the currently active version of each policy answers "current policy"
+  # questions; historical versions stay queryable via an explicit filter.
+  restrict_to_active_versions: true
+  # Hard ceiling on prompt context. Protects latency and token cost even if
+  # top_k is raised during an experiment.
+  max_context_characters: 7000
+  # Stops one verbose document from occupying every retrieval slot.
+  max_chunks_per_source: 3
+
+rules:
+  # Deterministic eligibility thresholds. These are the system's decision
+  # authority — the LLM explains them, it does not overrule them.
+  # Values are illustrative defaults for the Indian market and are meant to be
+  # tuned per lender; they are configuration, not code.
+  min_applicant_age: 21
+  max_age_at_loan_maturity: 70
+  max_tenure_years: 30
+  min_monthly_income_inr: 25000
+  min_credit_score: 700
+  conditional_credit_score: 650
+  # FOIR = (existing EMI + proposed EMI) / net monthly income.
+  max_foir_percent: 50.0
+  conditional_foir_percent: 55.0
+  min_employment_months_salaried: 12
+  min_employment_months_self_employed: 36
+  # Indicative rate used only to estimate the proposed EMI for the FOIR check.
+  indicative_annual_interest_percent: 8.75
+  # LTV ceilings by sanctioned loan amount, evaluated in order; a null
+  # max_loan_amount_inr means "everything above the previous slab".
+  ltv_slabs:
+    - max_loan_amount_inr: 3000000
+      max_ltv_percent: 90.0
+    - max_loan_amount_inr: 7500000
+      max_ltv_percent: 80.0
+    - max_loan_amount_inr: null
+      max_ltv_percent: 75.0
+
+watcher:
+  # The long-running update process. Polling, not a busy loop.
+  poll_interval_seconds: 900
+  jitter_seconds: 60
+  run_on_start: true
+  max_consecutive_failures: 5
+
+observability:
+  langsmith_project: home-loan-rag
+  # Applicant PII is never written to logs or trace metadata when this is true.
+  redact_applicant_pii: true

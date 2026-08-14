@@ -1,0 +1,33 @@
+# --- Vector database -------------------------------------------------------
+chromadb==1.5.9
+
+# --- Observability / evaluation -------------------------------------------
+# The LangSmith SDK is used directly (@traceable / Client) rather than through
+# LangChain, so tracing does not couple us to LangChain's release cadence.
+langsmith==0.10.18
+
+# --- Backend ---------------------------------------------------------------
+fastapi==0.141.1
+uvicorn[standard]==0.41.0
+pydantic==2.13.1
+pydantic-settings==2.13.0
+
+# --- Frontend --------------------------------------------------------------
+streamlit==1.61.1
+
+# --- Ingestion -------------------------------------------------------------
+httpx==0.28.1          # also the transport for the Ollama HTTP API
+pypdf==6.16.0
+beautifulsoup4==4.14.2
+lxml==6.0.2
+PyYAML==6.0.3
+
+# --- Numerics --------------------------------------------------------------
+numpy==2.3.5
+
+# --- Reliability -----------------------------------------------------------
+tenacity==9.1.2
+python-dotenv==1.2.1
+
+# --- Testing ---------------------------------------------------------------
+pytest==8.4.2
