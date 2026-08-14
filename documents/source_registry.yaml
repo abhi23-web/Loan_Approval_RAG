@@ -1,0 +1,106 @@
+# Document source registry.
+#
+# This is the single place where document URLs live. No URL is hard-coded
+# anywhere in the Python code; the ingestion pipeline reads this file.
+#
+# Field reference
+#   source_name      Stable identifier. Versions are tracked per source_name, so
+#                    renaming a source starts its version history over.
+#   url              https:// or file:// . Validated against
+#                    ingestion.allowed_schemes in config/settings.yaml.
+#   institution      Issuing body, surfaced in citations.
+#   document_type    regulation | credit_policy | product_page
+#   document_title   Human-readable title shown to the applicant.
+#   version          Version label the publisher itself claims, when known.
+#                    The pipeline assigns its own monotonic version number from
+#                    observed content changes; this field is provenance only.
+#   effective_date   Publisher's stated effective date if known, else null.
+#                    A date parsed out of the document body takes precedence.
+#   last_checked     Optional human note. The pipeline never writes back to this
+#                    file — rewriting YAML would destroy these comments — so the
+#                    authoritative last-checked timestamp lives in
+#                    data/metadata/version_store.json.
+#   enabled          false keeps the entry documented but skips fetching.
+#   authority        primary | secondary — primary sources win in citations
+#                    when two sources disagree.
+
+sources:
+
+  # --- Controlled local corpus -------------------------------------------
+  # A fictitious lender whose policy exists in three known versions. This is
+  # what the golden dataset is graded against: its ground truth is exactly
+  # knowable, so evaluation numbers mean something. scripts/simulate_policy_update.py
+  # promotes v1 -> v2 -> v3 through the ordinary change-detection path, which is
+  # how the versioning behaviour is demonstrated end to end.
+  - source_name: meridian_home_loan_policy
+    url: file://documents/local_policies/current/meridian_home_loan_policy.md
+    institution: Meridian Housing Finance Limited (illustrative)
+    document_type: credit_policy
+    document_title: Meridian Retail Home Loan Credit Policy
+    version: null
+    effective_date: null
+    last_checked: null
+    enabled: true
+    authority: primary
+
+  # --- Live regulatory sources -------------------------------------------
+  - source_name: rbi_master_circular_housing_finance
+    url: https://www.rbi.org.in/commonperson/english/Scripts/Notification.aspx?Id=1582
+    institution: Reserve Bank of India
+    document_type: regulation
+    document_title: Master Circular - Housing Finance
+    version: null
+    effective_date: null
+    last_checked: null
+    enabled: true
+    authority: primary
+
+  - source_name: rbi_housing_finance_master_circular_pdf
+    url: https://www.rbi.org.in/commonman/Upload/English/Notification/PDFs/46MS250915FA.pdf
+    institution: Reserve Bank of India
+    document_type: regulation
+    document_title: Master Circular on Housing Finance (PDF)
+    version: null
+    effective_date: null
+    last_checked: null
+    enabled: true
+    authority: primary
+
+  # --- Live lender product sources ---------------------------------------
+  # Marketing pages change without notice, which is precisely why the pipeline
+  # detects change by content hash rather than trusting a version string.
+  - source_name: hdfc_bank_home_loan_eligibility
+    url: https://www.hdfcbank.com/personal/products/loans/home-loan/eligbilty-criteria
+    institution: HDFC Bank
+    document_type: product_page
+    document_title: HDFC Bank Home Loan Eligibility Criteria
+    version: null
+    effective_date: null
+    last_checked: null
+    enabled: true
+    authority: secondary
+
+  - source_name: hdfc_bank_home_loan_overview
+    url: https://www.hdfcbank.com/personal/borrow/popular-loans/home-loan
+    institution: HDFC Bank
+    document_type: product_page
+    document_title: HDFC Bank Home Loan
+    version: null
+    effective_date: null
+    last_checked: null
+    enabled: true
+    authority: secondary
+
+  - source_name: sbi_home_loan_overview
+    url: https://www.sbi.co.in/web/personal-banking/loans/home-loans/home-loan
+    institution: State Bank of India
+    document_type: product_page
+    document_title: SBI Home Loan
+    version: null
+    effective_date: null
+    last_checked: null
+    # Disabled by default: this host has been observed to block automated
+    # clients. Enable it once you have confirmed the fetch succeeds from your
+    # network, so a first run does not fail on an avoidable 403.
+    enabled: false
+    authority: secondary
