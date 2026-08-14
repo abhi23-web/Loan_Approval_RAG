@@ -1,0 +1,197 @@
+{
+  "dataset_id": "home-loan-rag-golden-v1",
+  "dataset_version": "1.0.0",
+  "created_on": "2026-08-14",
+  "description": "Regression suite for the Home Loan RAG pipeline. Ten questions with exactly knowable ground truth, run repeatedly to measure both correctness and reproducibility.",
+  "why_this_corpus": "Every case is graded against the controlled Meridian policy fixture rather than a live bank website. Live pages change without notice, so an expected answer written from one would be wrong within weeks and the suite would measure the internet rather than the pipeline. The fixture's three versions are committed to the repository, so ground truth is verifiable by opening the file.",
+  "grading_precondition": {
+    "required_active_version": {
+      "meridian_home_loan_policy": 3
+    },
+    "how_to_reach_it": [
+      "python scripts/simulate_policy_update.py --version 1 && python scripts/ingest.py",
+      "python scripts/simulate_policy_update.py --version 2 && python scripts/ingest.py",
+      "python scripts/simulate_policy_update.py --version 3 && python scripts/ingest.py"
+    ],
+    "note": "Cases carrying a version_override are graded against a superseded version on purpose; they are what proves version filtering works."
+  },
+  "categories": {
+    "A": "Deterministic / absolute questions. The correct answer is a specific figure stated in the policy and does not change unless the policy does.",
+    "B": "Same-question reproducibility. Every case in this file is executed 'repeat_runs' times in one evaluation run, and the harness reports whether the answer, the retrieved chunk ordering, the citations and the cited version were identical across those executions. Reproducibility is therefore measured on all ten questions rather than on a separate set, because consistency on a question whose correctness is unknown would tell us nothing."
+  },
+  "reproducibility": {
+    "repeat_runs": 3,
+    "measures": [
+      "answer_consistency",
+      "retrieval_consistency",
+      "citation_consistency",
+      "version_consistency"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "GD-01",
+      "question": "What is the minimum CIBIL score required for a standard home loan sanction?",
+      "question_type": "deterministic_numeric",
+      "category": "A",
+      "expected_answer": "725",
+      "acceptable_answer_variations": ["725", "a CIBIL score of 725", "CIBIL 725"],
+      "expected_answer_patterns": ["\\b725\\b"],
+      "forbidden_answer_patterns": ["\\b700\\b", "\\b720\\b"],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["minimum acceptable CIBIL score", "725"],
+      "version_override": null,
+      "policy_reference": "Clause 3.1",
+      "why_it_matters": "A stale answer here (700 from version 1, 720 from version 2) is the exact failure mode document versioning exists to prevent."
+    },
+    {
+      "case_id": "GD-02",
+      "question": "What is the maximum loan-to-value ratio for a home loan above INR 75,00,000?",
+      "question_type": "deterministic_numeric",
+      "category": "A",
+      "expected_answer": "70 percent",
+      "acceptable_answer_variations": ["70 percent", "70%"],
+      "expected_answer_patterns": ["\\b70\\s*(percent|%)"],
+      "forbidden_answer_patterns": ["\\b75\\s*(percent|%)"],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["loan-to-value", "75,00,000", "70 percent"],
+      "version_override": null,
+      "policy_reference": "Clause 4.2",
+      "why_it_matters": "The answer sits inside a table row, so it is the case most sensitive to a chunk boundary cutting the table apart."
+    },
+    {
+      "case_id": "GD-03",
+      "question": "What is the maximum loan-to-value ratio for a home loan of up to INR 30,00,000?",
+      "question_type": "deterministic_numeric",
+      "category": "A",
+      "expected_answer": "90 percent",
+      "acceptable_answer_variations": ["90 percent", "90%"],
+      "expected_answer_patterns": ["\\b90\\s*(percent|%)"],
+      "forbidden_answer_patterns": [],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["30,00,000", "90 percent"],
+      "version_override": null,
+      "policy_reference": "Clause 4.2",
+      "why_it_matters": "Paired with GD-02: retrieving the right row of the same table is a precision test, not a recall test."
+    },
+    {
+      "case_id": "GD-04",
+      "question": "What is the maximum permitted fixed obligation to income ratio, or FOIR?",
+      "question_type": "deterministic_numeric",
+      "category": "A",
+      "expected_answer": "50 percent",
+      "acceptable_answer_variations": ["50 percent", "50%"],
+      "expected_answer_patterns": ["\\b50\\s*(percent|%)"],
+      "forbidden_answer_patterns": [],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["fixed obligation to income ratio", "50 percent"],
+      "version_override": null,
+      "policy_reference": "Clause 5.2",
+      "why_it_matters": "FOIR is the threshold the rule engine applies, so a mismatch between the explanation and the rule would be visible to an applicant."
+    },
+    {
+      "case_id": "GD-05",
+      "question": "Under what conditions is a FOIR of up to 55 percent permitted?",
+      "question_type": "deterministic_conditional",
+      "category": "A",
+      "expected_answer": "Where net monthly income exceeds INR 1,00,000 and the CIBIL score is 760 or above.",
+      "acceptable_answer_variations": [
+        "net monthly income above INR 1,00,000 and a CIBIL score of at least 760"
+      ],
+      "expected_answer_patterns": ["1,?00,?000", "\\b760\\b"],
+      "forbidden_answer_patterns": [],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["55 percent", "1,00,000", "760"],
+      "version_override": null,
+      "policy_reference": "Clause 5.3",
+      "why_it_matters": "Two conditions in one clause: a chunk that keeps only half of it produces a confidently incomplete answer."
+    },
+    {
+      "case_id": "GD-06",
+      "question": "What is the maximum loan tenure available for a home loan?",
+      "question_type": "deterministic_numeric",
+      "category": "A",
+      "expected_answer": "30 years",
+      "acceptable_answer_variations": ["30 years"],
+      "expected_answer_patterns": ["\\b30\\s*years?\\b"],
+      "forbidden_answer_patterns": [],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["maximum loan tenure", "30 years"],
+      "version_override": null,
+      "policy_reference": "Clause 6.1",
+      "why_it_matters": "Unchanged across all three versions, so it should be answered identically no matter which version is active."
+    },
+    {
+      "case_id": "GD-07",
+      "question": "What is the maximum permitted age of the primary applicant at loan maturity?",
+      "question_type": "deterministic_numeric",
+      "category": "A",
+      "expected_answer": "70 years",
+      "acceptable_answer_variations": ["70 years", "age 70"],
+      "expected_answer_patterns": ["\\b70\\b"],
+      "forbidden_answer_patterns": [],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["age", "loan maturity", "70"],
+      "version_override": null,
+      "policy_reference": "Clause 2.2",
+      "why_it_matters": "The number 70 also appears as an LTV percentage in this version, so this case detects retrieval that matches on a bare number rather than on meaning."
+    },
+    {
+      "case_id": "GD-08",
+      "question": "What is the processing fee percentage and its maximum cap?",
+      "question_type": "deterministic_multi_fact",
+      "category": "A",
+      "expected_answer": "0.40 percent of the sanctioned loan amount, capped at INR 15,000.",
+      "acceptable_answer_variations": ["0.40 percent, maximum INR 15,000", "0.4% capped at 15,000"],
+      "expected_answer_patterns": ["0\\.40?\\s*(percent|%)", "15,?000"],
+      "forbidden_answer_patterns": ["12,?500", "0\\.35\\s*(percent|%)"],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["processing fee", "0.40 percent", "15,000"],
+      "version_override": null,
+      "policy_reference": "Clause 7.1",
+      "why_it_matters": "Two facts from one clause, and both changed across versions — the cap was 12,500 until version 3."
+    },
+    {
+      "case_id": "GD-09",
+      "question": "Within how many days of the sanction letter date must disbursement commence before the sanction lapses?",
+      "question_type": "deterministic_numeric",
+      "category": "A",
+      "expected_answer": "120 days",
+      "acceptable_answer_variations": ["120 days"],
+      "expected_answer_patterns": ["\\b120\\s*days?\\b"],
+      "forbidden_answer_patterns": ["\\b90\\s*days?\\b"],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 3,
+      "expected_context_keywords": ["sanction lapses", "120 days"],
+      "version_override": null,
+      "policy_reference": "Clause 9.2",
+      "why_it_matters": "Sits in the last clause of the document, so it fails first when a chunker truncates a long tail."
+    },
+    {
+      "case_id": "GD-10",
+      "question": "Under version 1 of the policy, what was the minimum CIBIL score required for a standard sanction?",
+      "question_type": "historical_version_lookup",
+      "category": "A",
+      "expected_answer": "700",
+      "acceptable_answer_variations": ["700", "a CIBIL score of 700"],
+      "expected_answer_patterns": ["\\b700\\b"],
+      "forbidden_answer_patterns": ["\\b725\\b", "\\b720\\b"],
+      "expected_source": "meridian_home_loan_policy",
+      "expected_document_version": 1,
+      "expected_context_keywords": ["minimum acceptable CIBIL score", "700"],
+      "version_override": {
+        "meridian_home_loan_policy": 1
+      },
+      "policy_reference": "Clause 3.1 of version 1",
+      "why_it_matters": "The only case graded against a superseded version. It proves that retaining old versions is functional, not decorative: an auditor reviewing a 2023 decision needs the 2023 rule."
+    }
+  ]
+}
