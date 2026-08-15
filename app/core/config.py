@@ -72,23 +72,46 @@ class PathsSection(_Section):
 
 
 class LLMSection(_Section):
-    provider: Literal["ollama", "deterministic"] = "ollama"
-    base_url: str = "http://localhost:11434"
-    model: str = "llama3.1:8b"
+    # "ollama"        -> local model over the Ollama HTTP API
+    # "openai"        -> any OpenAI-compatible /chat/completions endpoint.
+    #                    Covers the free options (Groq, OpenRouter) and local
+    #                    servers (LM Studio, llama.cpp, vLLM) with one provider,
+    #                    because they all speak the same wire format.
+    # "deterministic" -> offline stub for tests; never a real answer.
+    provider: Literal["ollama", "openai", "deterministic"] = "openai"
+    base_url: str = "https://api.groq.com/openai/v1"
+    model: str = "llama-3.3-70b-versatile"
     temperature: float = 0.0
     top_p: float = 1.0
     seed: int = 42
     num_ctx: int = 8192
     num_predict: int = 800
     request_timeout_seconds: float = 300.0
+    # Which environment variable holds the key for the "openai" provider. Named
+    # rather than hard-coded so switching between Groq and OpenRouter is a
+    # config change, and so no key is ever written into settings.yaml.
+    api_key_env_var: str = "GROQ_API_KEY"
 
 
 class EmbeddingsSection(_Section):
-    provider: Literal["ollama", "deterministic"] = "ollama"
+    # Groq serves generation only — it has no embedding endpoint — so embeddings
+    # are always computed locally. That is not a compromise: a small local model
+    # embeds a few hundred policy chunks in seconds, costs nothing, and keeps the
+    # full document text on this machine. Generation sees a handful of retrieved
+    # chunks; embedding sees every document in full, so this is the half worth
+    # keeping local regardless of which LLM is in use.
+    #
+    # "fastembed"     -> local ONNX model. Small install, no PyTorch. (default)
+    # "huggingface"   -> local sentence-transformers model. Needs PyTorch.
+    # "ollama"        -> local Ollama server, if you happen to run one.
+    # "deterministic" -> offline hashing stub for tests; never a real answer.
+    provider: Literal["fastembed", "huggingface", "ollama", "deterministic"] = "fastembed"
     base_url: str = "http://localhost:11434"
-    model: str = "nomic-embed-text"
+    model: str = "BAAI/bge-small-en-v1.5"
     batch_size: int = Field(default=16, ge=1)
     request_timeout_seconds: float = 300.0
+    # Normalised vectors make cosine similarity behave predictably across models.
+    normalize: bool = True
 
 
 class VectorStoreSection(_Section):

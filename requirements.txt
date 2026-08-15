@@ -22,6 +22,11 @@ beautifulsoup4==4.14.2
 lxml==6.0.2
 PyYAML==6.0.3
 
+# --- Embeddings (local, no API key, CPU only) -----------------------------
+# ONNX-based: tens of MB, no PyTorch. Groq has no embedding endpoint, so this
+# is what turns policy text into vectors.
+fastembed==0.7.4
+
 # --- Numerics --------------------------------------------------------------
 numpy==2.3.5
 

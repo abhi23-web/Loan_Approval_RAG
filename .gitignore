@@ -23,8 +23,16 @@ evaluation/experiment_results/*
 
 # Editors / OS
 .idea/
-.vscode/
 .DS_Store
+
+# VS Code: ignore personal state, but keep the four files that make the project
+# runnable for anyone who clones it. These describe the project, not a person's
+# preferences, so they belong in version control.
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 
 # Test fixtures written under data/ so file:// sources stay inside the repo.
 data/test_fixtures/

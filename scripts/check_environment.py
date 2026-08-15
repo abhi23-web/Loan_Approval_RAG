@@ -10,6 +10,7 @@ you discover it three commands later inside a stack trace.
 
 from __future__ import annotations
 
+import os
 import sys
 
 # Running this file directly puts its own directory on sys.path rather than the
@@ -27,6 +28,7 @@ from dotenv import load_dotenv
 from app.core.config import get_chunking_config, get_settings
 from app.core.logging_config import configure_logging
 from app.core.tracing import tracing_enabled
+from app.ingestion.embeddings import build_embedding_provider
 
 _PASS = "  ok  "
 _WARN = " warn "
@@ -53,39 +55,108 @@ def _check_configuration() -> bool:
     return True
 
 
-def _check_ollama_models() -> bool:
+def _check_llm() -> bool:
+    """Confirm the configured generation provider can actually be used.
+
+    Deliberately does NOT call the model. A pre-flight check that costs a token
+    and a second of latency stops being run, and a check nobody runs is worse
+    than no check. This verifies the things that are cheap to verify: the key is
+    present and shaped right, or the local server is reachable.
+    """
     settings = get_settings()
-    if settings.llm.provider != "ollama" and settings.embeddings.provider != "ollama":
-        _line(_WARN, "ollama", "not configured as a provider; offline stubs are in use")
+
+    if settings.llm.provider == "deterministic":
+        _line(_WARN, "llm", "offline stub in use — answers are placeholder text, not real")
         return True
 
+    if settings.llm.provider == "openai":
+        key_variable = settings.llm.api_key_env_var
+        api_key = os.environ.get(key_variable, "").strip()
+        is_local = any(
+            host in settings.llm.base_url for host in ("localhost", "127.0.0.1", "0.0.0.0")
+        )
+
+        if is_local:
+            _line(_PASS, "llm", f"{settings.llm.model} at {settings.llm.base_url} (local, no key)")
+            return True
+
+        if not api_key or api_key.endswith("replace_me"):
+            _line(
+                _FAIL,
+                "llm",
+                f"{key_variable} is not set — get a free key at "
+                f"https://console.groq.com/keys and put it in .env",
+            )
+            return False
+
+        # Groq keys start with gsk_. A wrong-provider key is a common paste error
+        # and produces a 401 much later, which is harder to connect back to here.
+        if "groq.com" in settings.llm.base_url and not api_key.startswith("gsk_"):
+            _line(
+                _WARN,
+                "llm",
+                f"{key_variable} does not start with 'gsk_' — is that a Groq key?",
+            )
+            return True
+
+        masked = f"{api_key[:7]}…{api_key[-4:]}" if len(api_key) > 12 else "set"
+        _line(_PASS, "llm", f"{settings.llm.model} via {settings.llm.base_url} (key {masked})")
+        return True
+
+    # provider == "ollama"
     base_url = settings.llm.base_url.rstrip("/")
     try:
         with httpx.Client(timeout=5.0) as client:
             response = client.get(f"{base_url}/api/tags")
             response.raise_for_status()
-            installed = {
-                model.get("name", "") for model in response.json().get("models", [])
-            }
+            installed = {model.get("name", "") for model in response.json().get("models", [])}
     except httpx.HTTPError as connection_error:
-        _line(_FAIL, "ollama server", f"{base_url} unreachable — run 'ollama serve' ({connection_error})")
+        _line(
+            _FAIL,
+            "ollama server",
+            f"{base_url} unreachable — run 'ollama serve' ({connection_error})",
+        )
         return False
 
-    _line(_PASS, "ollama server", f"{base_url}, {len(installed)} model(s) installed")
+    is_installed = any(
+        name == settings.llm.model or name.split(":")[0] == settings.llm.model.split(":")[0]
+        for name in installed
+    )
+    if is_installed:
+        _line(_PASS, "llm", f"ollama {settings.llm.model}")
+        return True
+    _line(_FAIL, "llm", f"missing — run 'ollama pull {settings.llm.model}'")
+    return False
 
-    all_present = True
-    for role, required_model in (("llm", settings.llm.model), ("embeddings", settings.embeddings.model)):
-        # Ollama reports names with an explicit tag, e.g. "llama3.1:8b".
-        is_installed = any(
-            name == required_model or name.split(":")[0] == required_model.split(":")[0]
-            for name in installed
+
+def _check_embeddings() -> bool:
+    """Confirm the embedding provider is installed and its model can load.
+
+    This one DOES construct the provider, because the failure it catches — a
+    missing package or an undownloadable model — is exactly what would otherwise
+    surface halfway through an ingest, after the fetch work is already done.
+    """
+    settings = get_settings()
+    provider_name = settings.embeddings.provider
+
+    if provider_name == "deterministic":
+        _line(
+            _WARN,
+            "embeddings",
+            "offline hashing stub — no semantic understanding; retrieval quality "
+            "from this provider is not meaningful",
         )
-        if is_installed:
-            _line(_PASS, f"{role} model", required_model)
-        else:
-            _line(_FAIL, f"{role} model", f"missing — run 'ollama pull {required_model}'")
-            all_present = False
-    return all_present
+        return True
+
+    try:
+        build_embedding_provider(settings.embeddings)
+    except Exception as provider_failure:
+        first_line = str(provider_failure).splitlines()[0]
+        _line(_FAIL, "embeddings", f"{provider_name} unavailable — {first_line}")
+        return False
+
+    _line(_PASS, "embeddings", f"{provider_name} '{settings.embeddings.model}' (local)")
+    return True
 
 
 def _check_langsmith() -> bool:
@@ -120,7 +191,8 @@ def main() -> int:
     print("\nHome Loan RAG — environment check\n" + "-" * 60)
     checks = [
         _check_configuration(),
-        _check_ollama_models(),
+        _check_llm(),
+        _check_embeddings(),
         _check_langsmith(),
         _check_index(),
     ]

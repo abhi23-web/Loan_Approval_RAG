@@ -14,6 +14,7 @@ reproducible* — and the golden dataset measures whether that holds.
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -116,6 +117,124 @@ class OllamaLLMProvider(LLMProvider):
         )
 
 
+class OpenAICompatibleLLMProvider(LLMProvider):
+    """Chat completion against any OpenAI-compatible ``/chat/completions`` endpoint.
+
+    One provider covers a surprising amount of ground, because the OpenAI wire
+    format has become the de facto standard. All of these work by changing only
+    ``base_url`` and ``model`` in settings.yaml:
+
+    ==================  ===========================================  ==========
+    Service             base_url                                     Cost
+    ==================  ===========================================  ==========
+    Groq                https://api.groq.com/openai/v1               free tier
+    OpenRouter          https://openrouter.ai/api/v1                 free models
+    Together AI         https://api.together.xyz/v1                  free tier
+    LM Studio (local)   http://localhost:1234/v1                     free
+    llama.cpp (local)   http://localhost:8080/v1                     free
+    OpenAI              https://api.openai.com/v1                    paid
+    ==================  ===========================================  ==========
+
+    The determinism controls carry over: ``temperature=0``, ``top_p=1`` and a
+    fixed ``seed`` are sent on every request. Be aware that ``seed`` is honoured
+    by some providers and silently ignored by others — it is best-effort on a
+    hosted endpoint, unlike the local case. What the system actually guarantees
+    is that *this* code contributes no randomness of its own.
+    """
+
+    def __init__(self, settings: LLMSection) -> None:
+        super().__init__(settings.model)
+        self._settings = settings
+        self._endpoint = f"{settings.base_url.rstrip('/')}/chat/completions"
+        self._api_key = os.environ.get(settings.api_key_env_var, "").strip()
+
+        # A local server needs no key; a hosted one always does. Failing here,
+        # at construction, beats failing on the first user request.
+        is_local = any(
+            host in settings.base_url for host in ("localhost", "127.0.0.1", "0.0.0.0")
+        )
+        if not self._api_key and not is_local:
+            raise LLMError(
+                f"{settings.api_key_env_var} is not set, but llm.base_url points at "
+                f"{settings.base_url}, which requires a key.\n"
+                f"  Free options: https://console.groq.com/keys  or  "
+                f"https://openrouter.ai/keys\n"
+                f"  Then put it in .env as {settings.api_key_env_var}=..."
+            )
+
+    def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
+        request_body = {
+            "model": self._settings.model,
+            "temperature": self._settings.temperature,
+            "top_p": self._settings.top_p,
+            "seed": self._settings.seed,
+            "max_tokens": self._settings.num_predict,
+            "stream": False,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+
+        @retry(
+            retry=retry_if_exception_type(httpx.TransportError),
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=2),
+            reraise=True,
+        )
+        def _post() -> httpx.Response:
+            with httpx.Client(timeout=self._settings.request_timeout_seconds) as client:
+                return client.post(self._endpoint, json=request_body, headers=headers)
+
+        with measure_latency() as stopwatch:
+            try:
+                response = _post()
+            except httpx.HTTPError as transport_error:
+                raise LLMError(
+                    f"cannot reach {self._endpoint} ({transport_error})"
+                ) from transport_error
+
+        if response.status_code == httpx.codes.UNAUTHORIZED:
+            raise LLMError(
+                f"the endpoint rejected {self._settings.api_key_env_var} (HTTP 401). "
+                "Check the key is current and belongs to this provider."
+            )
+        if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
+            raise LLMError(
+                "rate limit reached (HTTP 429). Free tiers are metered per minute — "
+                "wait, or switch to a smaller model."
+            )
+        if response.status_code == httpx.codes.NOT_FOUND:
+            raise LLMError(
+                f"the endpoint does not serve model '{self._settings.model}' (HTTP 404). "
+                "Check the provider's model list; hosted model ids change."
+            )
+        if response.status_code >= 400:
+            raise LLMError(
+                f"chat request failed with HTTP {response.status_code}: {response.text[:300]}"
+            )
+
+        payload = response.json()
+        choices = payload.get("choices") or []
+        if not choices:
+            raise LLMError("the endpoint returned no choices")
+        message_content = (choices[0].get("message") or {}).get("content")
+        if not isinstance(message_content, str) or not message_content.strip():
+            raise LLMError("the endpoint returned an empty message")
+
+        usage = payload.get("usage") or {}
+        return LLMResponse(
+            text=message_content.strip(),
+            model=payload.get("model", self._settings.model),
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            latency_ms=stopwatch.elapsed_ms,
+        )
+
+
 class DeterministicLLMProvider(LLMProvider):
     """Offline test double.
 
@@ -156,6 +275,14 @@ def build_llm_provider(settings: LLMSection) -> LLMProvider:
             settings.seed,
         )
         return OllamaLLMProvider(settings)
+    if settings.provider == "openai":
+        _logger.info(
+            "using OpenAI-compatible generation: model=%s endpoint=%s temperature=%s",
+            settings.model,
+            settings.base_url,
+            settings.temperature,
+        )
+        return OpenAICompatibleLLMProvider(settings)
     _logger.warning(
         "using the DETERMINISTIC LLM provider — offline stub, not a real model; "
         "generation-quality metrics from this provider are not meaningful"

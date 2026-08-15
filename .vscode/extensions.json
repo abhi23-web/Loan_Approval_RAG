@@ -1,0 +1,10 @@
+{
+  // VS Code will offer to install these when you open the folder.
+  // Only the first two are actually required.
+  "recommendations": [
+    "ms-python.python",       // required — interpreter, debugger, test runner
+    "ms-python.vscode-pylance", // required — import resolution and type hints
+    "redhat.vscode-yaml",     // optional — the config/ files are YAML
+    "humao.rest-client"       // optional — lets you call the API from api.http
+  ]
+}

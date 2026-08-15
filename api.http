@@ -1,0 +1,88 @@
+# API requests you can run from inside VS Code.
+#
+# Install the "REST Client" extension (humao.rest-client), start the backend
+# (F5 → "2. API backend"), then click the "Send Request" link that appears
+# above each request below.
+#
+# Every payload here is a working one — the request bodies are exactly what the
+# API accepts, including the details that are easy to get wrong.
+
+@baseUrl = http://localhost:8000/api/v1
+
+### Health — is the backend up, and what is it running?
+# Reports which providers are active. `"llm_provider": "deterministic"` means
+# you are on the offline stub, not a real model.
+GET {{baseUrl}}/health
+
+
+### Ask a policy question
+POST {{baseUrl}}/policy-question
+Content-Type: application/json
+
+{
+  "question": "What is the maximum loan to value ratio?"
+}
+
+
+### Assess a loan application — an applicant who qualifies
+#
+# Two things trip people up here:
+#   1. The application must be nested under an "application" key. Posting the
+#      fields at the top level gives you a 422 listing every field as
+#      "extra_forbidden", which reads like the schema is broken when it isn't.
+#   2. The model cross-validates fields. If existing_monthly_emi_inr is above
+#      zero, number_of_existing_loans must be too — an EMI with no loan behind
+#      it is a data error, and it is rejected rather than quietly assessed.
+POST {{baseUrl}}/loan-assessment
+Content-Type: application/json
+
+{
+  "application": {
+    "applicant_name": "Test Applicant",
+    "age_years": 32,
+    "employment_type": "salaried",
+    "employment_experience_months": 40,
+    "monthly_income_inr": 90000,
+    "credit_score": 760,
+    "existing_monthly_emi_inr": 5000,
+    "number_of_existing_loans": 1,
+    "loan_amount_required_inr": 4200000,
+    "property_value_inr": 6000000,
+    "loan_tenure_years": 20
+  }
+}
+
+
+### Assess a loan application — an applicant who does not
+# Low credit score, thin income against the requested amount. Compare the
+# `checks` array in the response with the one above: each check names the
+# observed value and the threshold it was measured against.
+POST {{baseUrl}}/loan-assessment
+Content-Type: application/json
+
+{
+  "application": {
+    "applicant_name": "Marginal Applicant",
+    "age_years": 24,
+    "employment_type": "self_employed",
+    "employment_experience_months": 14,
+    "monthly_income_inr": 28000,
+    "credit_score": 610,
+    "existing_monthly_emi_inr": 9000,
+    "number_of_existing_loans": 2,
+    "loan_amount_required_inr": 5000000,
+    "property_value_inr": 5500000,
+    "loan_tenure_years": 25
+  }
+}
+
+
+### What documents are indexed, and at which version?
+GET {{baseUrl}}/documents/status
+
+
+### Re-check the sources for updates
+POST {{baseUrl}}/documents/refresh
+Content-Type: application/json
+
+{}

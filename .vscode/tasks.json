@@ -1,0 +1,50 @@
+{
+  // Ctrl+Shift+P → "Tasks: Run Task" → pick one.
+  // These are the same commands as the Makefile, for when you'd rather click
+  // than type. "Run tests" is bound to Ctrl+Shift+P → "Run Test Task".
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install dependencies",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} -m pip install -r requirements.txt",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Run tests",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} -m pytest",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Environment check",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} scripts/check_environment.py",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Ingest — offline",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} scripts/ingest.py --source meridian_home_loan_policy",
+      "options": {
+        "env": {
+          "HLR__LLM__PROVIDER": "deterministic",
+          "HLR__EMBEDDINGS__PROVIDER": "deterministic"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Reset all data",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} scripts/reset_data.py --yes",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

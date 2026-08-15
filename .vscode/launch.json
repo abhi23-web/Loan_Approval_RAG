@@ -1,0 +1,117 @@
+{
+  // Press F5, or pick a configuration from the Run and Debug sidebar (Ctrl+Shift+D).
+  //
+  // Every configuration below sets HLR__LLM__PROVIDER and HLR__EMBEDDINGS__PROVIDER
+  // to "deterministic", which means they run with NO Ollama installed. That is
+  // the point: you can explore the whole system, set breakpoints, and watch data
+  // move through it before downloading a single model.
+  //
+  // The offline providers are a hashing embedder and a stub LLM. They exercise
+  // every code path correctly, but they do not understand anything — answers
+  // from them are not evidence of quality. When you want real answers, install
+  // Ollama and use the two "(real Ollama)" configurations at the bottom.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "1. Ingest — offline (no Ollama)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/ingest.py",
+      "args": ["--source", "meridian_home_loan_policy"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "env": {
+        "HLR__LLM__PROVIDER": "deterministic",
+        "HLR__EMBEDDINGS__PROVIDER": "deterministic"
+      }
+    },
+    {
+      "name": "2. API backend — offline (no Ollama)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_backend.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "env": {
+        "HLR__LLM__PROVIDER": "deterministic",
+        "HLR__EMBEDDINGS__PROVIDER": "deterministic"
+      }
+    },
+    {
+      "name": "3. Streamlit UI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": ["run", "frontend/streamlit_app.py"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "env": {
+        "HOME_LOAN_API_URL": "http://localhost:8000"
+      }
+    },
+    {
+      "name": "4. Environment check",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/check_environment.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false
+    },
+    {
+      "name": "5. Evaluation — offline",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/evaluation/run_evaluation.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "env": {
+        "HLR__LLM__PROVIDER": "deterministic",
+        "HLR__EMBEDDINGS__PROVIDER": "deterministic"
+      }
+    },
+    {
+      "name": "6. Show policy version history",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/simulate_policy_update.py",
+      "args": ["--status"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false
+    },
+
+    {
+      "name": "7. Ingest (real Ollama)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/ingest.py",
+      "args": ["--force"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false
+    },
+    {
+      "name": "8. API backend (real Ollama)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run_backend.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false
+    }
+  ],
+  "compounds": [
+    {
+      // Starts the API and the UI together. The UI talks to the API over HTTP,
+      // so the API must be up first — VS Code launches them in listed order.
+      "name": "API + UI (offline)",
+      "configurations": ["2. API backend — offline (no Ollama)", "3. Streamlit UI"],
+      "stopAll": true
+    }
+  ]
+}

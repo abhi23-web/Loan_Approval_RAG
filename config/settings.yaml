@@ -19,27 +19,48 @@ paths:
   experiment_results_dir: evaluation/experiment_results
 
 llm:
-  # "ollama"      -> real local model over the Ollama HTTP API
-  # "deterministic" -> offline stub used by unit tests and CI; never for real answers
-  provider: ollama
-  base_url: http://localhost:11434
-  model: llama3.1:8b
-  # Determinism controls. An LLM is not inherently deterministic; these settings
-  # plus a fixed retrieval order are what make repeated runs reproducible.
+  # "openai"        -> any OpenAI-compatible endpoint (default: Groq)
+  # "ollama"        -> a local Ollama server, if you run one
+  # "deterministic" -> offline stub used by unit tests and CI; never real answers
+  #
+  # Groq serves Llama models over an OpenAI-compatible API, free tier, very fast.
+  # Get a key at https://console.groq.com/keys and put it in .env as GROQ_API_KEY.
+  #
+  # Current Groq production models (August 2026):
+  #   llama-3.3-70b-versatile   better reasoning, ~280 tok/s   (default)
+  #   llama-3.1-8b-instant      much faster and cheaper, weaker on nuance
+  provider: openai
+  base_url: https://api.groq.com/openai/v1
+  model: llama-3.3-70b-versatile
+  api_key_env_var: GROQ_API_KEY
+  # Determinism controls. temperature 0 and a fixed seed are what make repeat
+  # runs reproducible. Note that on a HOSTED endpoint the seed is best-effort —
+  # some providers honour it, some ignore it, and the deployment can change
+  # under you. The guarantee this code makes is that it adds no randomness.
   temperature: 0.0
   top_p: 1.0
   seed: 42
   num_ctx: 8192
   num_predict: 800
-  request_timeout_seconds: 300
+  request_timeout_seconds: 120
 
 embeddings:
-  provider: ollama          # "ollama" | "deterministic"
-  base_url: http://localhost:11434
-  model: nomic-embed-text
-  # Chunks are embedded in batches so a 400-chunk document is not 400 round trips.
+  # Groq has NO embedding endpoint, so embeddings are always local. This is the
+  # half worth keeping local anyway: generation sees a handful of retrieved
+  # chunks, but embedding sees every document in full.
+  #
+  # "fastembed"     -> local ONNX. Small install, no PyTorch.  (default)
+  # "huggingface"   -> local sentence-transformers. Needs PyTorch.
+  # "ollama"        -> a local Ollama server, if you run one
+  # "deterministic" -> offline hashing stub for tests; never real answers
+  #
+  # bge-small-en-v1.5 gives 384-dimension vectors and downloads ~130 MB once.
+  provider: fastembed
+  base_url: http://localhost:11434    # only used by the "ollama" provider
+  model: BAAI/bge-small-en-v1.5
   batch_size: 16
   request_timeout_seconds: 300
+  normalize: true
 
 vector_store:
   # One Chroma collection per chunking strategy so experiments never contaminate
